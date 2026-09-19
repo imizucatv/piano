@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <!-- タブレットでの拡大縮小を防止し、アプリのような操作感にします -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TAKESHI PIANO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            overscroll-behavior: none;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation; /* スワイプなどのブラウザ標準動作をキャンセル */
+        }
+        
+        .font-title {
+            font-family: 'Fredoka One', cursive;
+        }
+
+        /* ピアノ全体のコンテナ */
+        #piano-container {
+            position: relative;
+            width: 100%;
+            height: 25vh; /* 画面下部25%をピアノ領域に */
+            min-height: 150px;
+            display: flex;
+            background-color: #fca5a5;
+            border-top: 6px solid #ef4444;
+            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 白鍵のスタイル */
+        .key-white {
+            flex: 1;
+            height: 100%;
+            background: linear-gradient(to bottom, #ffffff 0%, #f3f4f6 100%);
+            border-right: 1px solid #d1d5db;
+            border-left: 1px solid #ffffff;
+            border-bottom: 6px solid #cbd5e1;
+            border-radius: 0 0 8px 8px;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 15px;
+            color: #94a3b8;
+            font-weight: 800;
+            font-size: 0.8rem;
+            cursor: pointer;
+            box-sizing: border-box;
+            transition: all 0.05s ease;
+        }
+
+        /* 白鍵 押下時 */
+        .key-white.active {
+            background: linear-gradient(to bottom, #fef08a 0%, #fde047 100%);
+            border-bottom-width: 2px;
+            transform: translateY(4px);
+            color: #ca8a04;
+        }
+
+        /* 黒鍵のスタイル */
+        .key-black {
+            position: absolute;
+            top: 0;
+            height: 60%;
+            background: linear-gradient(to bottom, #374151 0%, #111827 100%);
+            border: 1px solid #000;
+            border-bottom: 5px solid #000;
+            border-radius: 0 0 6px 6px;
+            z-index: 2;
+            cursor: pointer;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+            transition: all 0.05s ease;
+        }
+
+        /* 黒鍵 押下時 */
+        .key-black.active {
+            background: linear-gradient(to bottom, #f472b6 0%, #ec4899 100%);
+            border-bottom-width: 2px;
+            transform: translateY(3px);
+            box-shadow: 0 0 10px #f472b6;
+        }
+
+        /* カスタムセレクトボックス */
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            background-size: 1em;
+        }
+
+        /* スタート画面のポップなアニメーション */
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(-5%); }
+            50% { transform: translateY(5%); }
+        }
+        .animate-bounce-slow {
+            animation: bounce-slow 3s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex flex-col overflow-hidden text-slate-800">
+
+    <!-- ヘッダー（設定とスコア） -->
+    <header class="h-20 bg-white/80 backdrop-blur-md border-b-4 border-amber-200 flex items-center justify-between px-4 md:px-8 shrink-0 z-10">
+        
+        <div class="flex items-center space-x-2 md:space-x-4">
+            <h1 class="text-2xl md:text-4xl font-title text-amber-500 tracking-wide drop-shadow-sm">
+                TAKESHI <span class="text-rose-500">PIANO</span>
+            </h1>
+        </div>
+
+        <!-- プレイ中の情報表示 (初期は非表示) -->
+        <div id="play-info" class="hidden flex items-center space-x-6">
+            <div class="text-center bg-blue-100 px-4 py-1 rounded-2xl border-2 border-blue-200">
+                <p class="text-xs text-blue-500 font-bold uppercase">Score</p>
+                <p id="score-display" class="text-xl md:text-2xl font-black text-blue-600 leading-none">00000</p>
+            </div>
+            <div class="text-center bg-rose-100 px-4 py-1 rounded-2xl border-2 border-rose-200">
+                <p class="text-xs text-rose-500 font-bold uppercase">Combo</p>
+                <p id="combo-display" class="text-xl md:text-2xl font-black text-rose-600 leading-none">0</p>
+            </div>
+        </div>
+
+        <!-- 設定UI -->
+        <div id="settings-ui" class="flex items-center space-x-2 md:space-x-4">
+            <select id="song-select" class="bg-amber-100 border-2 border-amber-300 text-amber-800 font-bold py-2 pl-4 pr-10 rounded-full focus:outline-none focus:ring-4 focus:ring-amber-200 transition-all text-sm md:text-base">
+                <!-- JSで曲リストを生成 -->
+            </select>
+            <select id="speed-select" class="bg-emerald-100 border-2 border-emerald-300 text-emerald-800 font-bold py-2 pl-4 pr-10 rounded-full focus:outline-none focus:ring-4 focus:ring-emerald-200 transition-all text-sm md:text-base">
+                <option value="0.5">速さ: x0.5 (ゆっくり)</option>
+                <option value="0.75">速さ: x0.75</option>
+                <option value="1.0" selected>速さ: x1.0 (ふつう)</option>
+                <option value="1.25">速さ: x1.25</option>
+                <option value="1.5">速さ: x1.5 (はやい)</option>
+            </select>
+        </div>
+
+    </header>
+
+    <!-- メインゲームエリア（キャンバス） -->
+    <main class="relative flex-1 w-full overflow-hidden bg-sky-50">
+        <!-- 背景装飾 -->
+        <div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: radial-gradient(#60a5fa 2px, transparent 2px); background-size: 30px 30px;"></div>
+        
+        <canvas id="game-canvas" class="block w-full h-full relative z-10"></canvas>
+        
+        <!-- ジャッジメント表示 (Perfect/Good/Miss) -->
+        <div id="judgment-display" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-title font-bold opacity-0 transition-opacity duration-100 pointer-events-none z-20" style="-webkit-text-stroke: 2px white;">
+        </div>
+
+        <!-- スタート画面 -->
+        <div id="start-screen" class="absolute inset-0 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center z-30 transition-opacity duration-300">
+            <div class="animate-bounce-slow text-center">
+                <h2 class="text-5xl md:text-7xl font-title text-amber-500 mb-6" style="-webkit-text-stroke: 3px white;">
+                    Let's Play!
+                </h2>
+                <button id="start-btn" class="px-12 py-5 bg-gradient-to-b from-rose-400 to-rose-600 rounded-full text-white font-black text-2xl md:text-3xl hover:from-rose-300 hover:to-rose-500 transform hover:scale-110 transition-all shadow-[0_10px_20px_rgba(225,29,72,0.4)] active:scale-95 border-4 border-white">
+                    スタート！
+                </button>
+            </div>
+            <p class="mt-8 text-slate-600 font-bold bg-white/80 px-6 py-2 rounded-full shadow-sm">
+                曲と速さを選んで、上のボタンを押してね🎵
+            </p>
+        </div>
+        
+        <!-- リザルト画面 -->
+        <div id="result-screen" class="hidden absolute inset-0 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center z-30 transition-opacity duration-300">
+            <h2 class="text-4xl md:text-6xl font-title text-blue-500 mb-2">FINISH!</h2>
+            <div class="bg-white p-8 rounded-3xl shadow-xl border-4 border-blue-200 text-center mb-8">
+                <p class="text-slate-500 font-bold mb-2">最終スコア</p>
+                <p id="final-score" class="text-5xl font-black text-blue-600 mb-4">0</p>
+                <div class="flex justify-center space-x-6 text-lg font-bold">
+                    <p class="text-amber-500">Max Combo: <span id="final-combo">0</span></p>
+                </div>
+            </div>
+            <button id="retry-btn" class="px-10 py-4 bg-blue-500 rounded-full text-white font-black text-xl hover:bg-blue-400 transform hover:scale-105 transition-all shadow-lg active:scale-95 border-4 border-white">
+                もういちどあそぶ
+            </button>
+        </div>
+    </main>
+
+    <!-- ピアノ鍵盤エリア (32鍵) -->
+    <div id="piano-container" class="w-full shrink-0 relative">
+        <!-- JSで動的に生成されます -->
+    </div>
+
+    <script>
+        // --- 1. 32鍵盤の定義 (F3 から C6) ---
+        // freq: 周波数, type: 白/黒, whiteIndex: 左端からの白鍵のインデックス(0-18)
+        const KEYS = [
+            { id: 'F3',  type: 'white', whiteIndex: 0,  freq: 174.61, label: 'F' },
+            { id: 'Fs3', type: 'black', seamIndex: 1,   freq: 185.00 },
+            { id: 'G3',  type: 'white', whiteIndex: 1,  freq: 196.00, label: 'G' },
+            { id: 'Gs3', type: 'black', seamIndex: 2,   freq: 207.65 },
+            { id: 'A3',  type: 'white', whiteIndex: 2,  freq: 220.00, label: 'A' },
+            { id: 'As3', type: 'black', seamIndex: 3,   freq: 233.08 },
+            { id: 'B3',  type: 'white', whiteIndex: 3,  freq: 246.94, label: 'B' },
+            { id: 'C4',  type: 'white', whiteIndex: 4,  freq: 261.63, label: 'C' }, // ミドルC
+            { id: 'Cs4', type: 'black', seamIndex: 5,   freq: 277.18 },
+            { id: 'D4',  type: 'white', whiteIndex: 5,  freq: 293.66, label: 'D' },
+            { id: 'Ds4', type: 'black', seamIndex: 6,   freq: 311.13 },
+            { id: 'E4',  type: 'white', whiteIndex: 6,  freq: 329.63, label: 'E' },
+            { id: 'F4',  type: 'white', whiteIndex: 7,  freq: 349.23, label: 'F' },
+            { id: 'Fs4', type: 'black', seamIndex: 8,   freq: 369.99 },
+            { id: 'G4',  type: 'white', whiteIndex: 8,  freq: 392.00, label: 'G' },
+            { id: 'Gs4', type: 'black', seamIndex: 9,   freq: 415.30 },
+            { id: 'A4',  type: 'white', whiteIndex: 9,  freq: 440.00, label: 'A' },
+            { id: 'As4', type: 'black', seamIndex: 10,  freq: 466.16 },
+            { id: 'B4',  type: 'white', whiteIndex: 10, freq: 493.88, label: 'B' },
+            { id: 'C5',  type: 'white', whiteIndex: 11, freq: 523.25, label: 'C' },
+            { id: 'Cs5', type: 'black', seamIndex: 12,  freq: 554.37 },
+            { id: 'D5',  type: 'white', whiteIndex: 12, freq: 587.33, label: 'D' },
+            { id: 'Ds5', type: 'black', seamIndex: 13,  freq: 622.25 },
+            { id: 'E5',  type: 'white', whiteIndex: 13, freq: 659.25, label: 'E' },
+            { id: 'F5',  type: 'white', whiteIndex: 14, freq: 698.46, label: 'F' },
+            { id: 'Fs5', type: 'black', seamIndex: 15,  freq: 739.99 },
+            { id: 'G5',  type: 'white', whiteIndex: 15, freq: 783.99, label: 'G' },
+            { id: 'Gs5', type: 'black', seamIndex: 16,  freq: 830.61 },
+            { id: 'A5',  type: 'white', whiteIndex: 16, freq: 880.00, label: 'A' },
+            { id: 'As5', type: 'black', seamIndex: 17,  freq: 932.33 },
+            { id: 'B5',  type: 'white', whiteIndex: 17, freq: 987.77, label: 'B' },
+            { id: 'C6',  type: 'white', whiteIndex: 18, freq: 1046.50, label:'C' }
+        ];
+        const TOTAL_WHITE_KEYS = 19; // 白鍵の総数
+
+        // --- 2. 楽曲データ (簡易MML風記法) ---
+        // トークン単位: 8分音符(BPM基準)。 '-' は休符/延長。
+        const SONGS = [
+            { id: 'twinkle', name: 'きらきら星', bpm: 120, 
+              score: 'C4 - C4 - G4 - G4 - A4 - A4 - G4 - - - F4 - F4 - E4 - E4 - D4 - D4 - C4 - - -' },
+            { id: 'tulip', name: 'チューリップ', bpm: 120, 
+              score: 'C4 - D4 - E4 - - - C4 - D4 - E4 - - - G4 - E4 - D4 - C4 - C4 - D4 - E4 - - -' },
+            { id: 'frog', name: 'かえるのうた', bpm: 120, 
+              score: 'C4 - D4 - E4 - F4 - E4 - D4 - C4 - - - E4 - F4 - G4 - A4 - G4 - F4 - E4 - - - C4 - - - C4 - - - C4 C4 D4 D4 E4 E4 F4 F4 E4 - D4 - C4 - - -' },
+            { id: 'bee', name: 'ぶんぶんぶん', bpm: 140, 
+              score: 'G4 - - - E4 - - - F4 - D4 - - - - - C4 - D4 - E4 - F4 - G4 - E4 - - - - -' },
+            { id: 'mary', name: 'メリーさんのひつじ', bpm: 120, 
+              score: 'E4 - D4 - C4 - D4 - E4 - E4 - E4 - - - D4 - D4 - D4 - - - E4 - G4 - G4 - - -' },
+            { id: 'butterfly', name: 'ちょうちょう', bpm: 130, 
+              score: 'G4 - E4 - E4 - - - F4 - D4 - D4 - - - C4 - D4 - E4 - F4 - G4 - G4 - G4 - - -' },
+            { id: 'chestnut', name: '大きな栗の木の下で', bpm: 110, 
+              score: 'C4 - C4 - D4 - D4 - E4 - E4 - G4 - - - F4 - F4 - E4 - E4 - D4 - D4 - C4 - - -' },
+            { id: 'london', name: 'ロンドン橋', bpm: 130, 
+              score: 'G4 - A4 - G4 - F4 - E4 - F4 - G4 - - - D4 - E4 - F4 - - - E4 - F4 - G4 - - -' },
+            { id: 'bear', name: 'もりのくまさん', bpm: 120, 
+              score: 'C4 - C4 - E4 - C4 - G4 - G4 - G4 - - - F4 - F4 - A4 - F4 - C5 - C5 - C5 - - -' },
+            { id: 'mountain', name: 'アルプス一万尺', bpm: 130,
+              score: 'G4 - G4 - G4 - A4 G4 F4 - E4 - C4 - - - G4 - G4 - G4 - A4 G4 F4 - E4 - D4 - - -' }
+        ];
+
+        // --- 3. システム変数 ---
+        let audioCtx;
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const pianoContainer = document.getElementById('piano-container');
+        
+        let gameState = {
+            isPlaying: false,
+            score: 0,
+            combo: 0,
+            maxCombo: 0,
+            notes: [],      
+            hitEffects: [], 
+            songStartTime: 0,
+            speedMode: 1.0,
+            animationId: null
+        };
+
+        const NOTE_DROP_TIME = 1500; // 画面上端から判定ライン(下端)に到達するまでの時間(ms)
+        const HIT_ZONE_OFFSET = 30;  // 判定ラインの下からの位置(px)
+
+        // --- STREAMING_CHUNK:UIとピアノ構築処理... ---
+
+        // UI要素の取得
+        const songSelect = document.getElementById('song-select');
+        const speedSelect = document.getElementById('speed-select');
+        const startBtn = document.getElementById('start-btn');
+        const retryBtn = document.getElementById('retry-btn');
+        const startScreen = document.getElementById('start-screen');
+        const resultScreen = document.getElementById('result-screen');
+        const settingsUi = document.getElementById('settings-ui');
+        const playInfo = document.getElementById('play-info');
+        const scoreDisplay = document.getElementById('score-display');
+        const comboDisplay = document.getElementById('combo-display');
+        const judgmentDisplay = document.getElementById('judgment-display');
+
+        // 曲リストのセットアップ
+        SONGS.forEach((song, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = song.name;
+            songSelect.appendChild(option);
+        });
+
+        // ピアノ鍵盤をDOMに生成 (32鍵用)
+        function buildPiano() {
+            pianoContainer.innerHTML = '';
+            
+            const blackKeyWidthRatio = 0.65; // 白鍵に対する黒鍵の幅の割合
+
+            KEYS.forEach(keyData => {
+                const keyEl = document.createElement('div');
+                keyEl.id = `key-${keyData.id}`;
+                
+                // ドの音（C）などにラベルを付ける
+                if (keyData.label) {
+                    const label = document.createElement('span');
+                    label.textContent = keyData.label;
+                    keyEl.appendChild(label);
+                }
+
+                if (keyData.type === 'white') {
+                    keyEl.className = 'key-white';
+                    pianoContainer.appendChild(keyEl);
+                } else {
+                    keyEl.className = 'key-black';
+                    const whiteKeyWidthPercent = 100 / TOTAL_WHITE_KEYS;
+                    const blackKeyWidthPercent = whiteKeyWidthPercent * blackKeyWidthRatio;
+                    
+                    keyEl.style.width = `${blackKeyWidthPercent}%`;
+                    const leftPos = (keyData.seamIndex * whiteKeyWidthPercent) - (blackKeyWidthPercent / 2);
+                    keyEl.style.left = `${leftPos}%`;
+                    
+                    pianoContainer.appendChild(keyEl);
+                }
+
+                // マルチタッチ対応イベント
+                const triggerPress = (e) => {
+                    e.preventDefault(); 
+                    if(e.type === 'mousedown' && e.button !== 0) return;
+                    handleKeyPress(keyData);
+                };
+                const triggerRelease = (e) => {
+                    e.preventDefault();
+                    handleKeyRelease(keyData);
+                };
+
+                keyEl.addEventListener('mousedown', triggerPress);
+                keyEl.addEventListener('touchstart', triggerPress, {passive: false});
+                
+                keyEl.addEventListener('mouseup', triggerRelease);
+                keyEl.addEventListener('mouseleave', triggerRelease);
+                keyEl.addEventListener('touchend', triggerRelease);
+            });
+        }
+
+        // --- STREAMING_CHUNK:オーディオとゲームロジック... ---
+
+        // Web Audio APIによる発音 (同時発音を許容するため毎回オシレーター作成)
+        function playTone(frequency) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = 'sine'; // ファミリー向けに柔らかいサイン波〜丸い音
+            osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+            
+            // エンベロープ設定
+            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 0.01); // アタック
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2); // ディケイ
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 1.2);
+        }
+
+        // 楽譜データからノーツ配列を生成
+        function parseScoreData(song) {
+            const tokens = song.score.trim().split(/\s+/);
+            const msPerEighth = (60000 / song.bpm) / 2; 
+            let timeTracker = 0;
+            const generatedNotes = [];
+            
+            tokens.forEach(token => {
+                if (token === '-') {
+                    timeTracker += msPerEighth;
+                } else {
+                    const keyInfo = KEYS.find(k => k.id === token);
+                    if (keyInfo) {
+                        generatedNotes.push({
+                            keyData: keyInfo,
+                            targetTime: timeTracker,
+                            hit: false,
+                            missed: false
+                        });
+                    }
+                    timeTracker += msPerEighth;
+                }
+            });
+            return { notes: generatedNotes, duration: timeTracker };
+        }
+
+        // 描画用のレーン情報を計算 (パーセンテージベース)
+        function getLaneInfo(keyData) {
+            const whiteKeyWidth = canvas.width / TOTAL_WHITE_KEYS;
+            const blackKeyWidth = whiteKeyWidth * 0.65;
+            
+            if (keyData.type === 'white') {
+                return {
+                    x: keyData.whiteIndex * whiteKeyWidth,
+                    w: whiteKeyWidth,
+                    color: '#fde047', // 黄色系ノーツ
+                    border: '#ca8a04'
+                };
+            } else {
+                return {
+                    x: (keyData.seamIndex * whiteKeyWidth) - (blackKeyWidth / 2),
+                    w: blackKeyWidth,
+                    color: '#f472b6', // ピンク系ノーツ
+                    border: '#be185d'
+                };
+            }
+        }
+
+        // 鍵盤が押された時の処理
+        function handleKeyPress(keyData) {
+            const el = document.getElementById(`key-${keyData.id}`);
+            if (el && !el.classList.contains('active')) {
+                el.classList.add('active');
+                playTone(keyData.freq);
+                
+                if (gameState.isPlaying) {
+                    checkHit(keyData);
+                }
+            }
+        }
+
+        function handleKeyRelease(keyData) {
+            const el = document.getElementById(`key-${keyData.id}`);
+            if (el) el.classList.remove('active');
+        }
+
+        // ヒット判定
+        function checkHit(pressedKey) {
+            if (!gameState.isPlaying) return;
+            
+            const currentPlayTime = (performance.now() - gameState.songStartTime) * gameState.speedMode;
+            
+            // 判定の閾値(ms)
+            const thresholdPerfect = 100; // 甘め
+            const thresholdGood = 250;
+            
+            let targetNote = null;
+            let minDiff = Infinity;
+
+            // 押された鍵盤に対応するノーツの中で最もタイミングが近いものを探す
+            for (let note of gameState.notes) {
+                if (note.keyData.id === pressedKey.id && !note.hit && !note.missed) {
+                    const diff = Math.abs(note.targetTime - currentPlayTime);
+                    if (diff < minDiff && diff <= thresholdGood) {
+                        minDiff = diff;
+                        targetNote = note;
+                    }
+                }
+            }
+
+            if (targetNote) {
+                targetNote.hit = true;
+                
+                // エフェクト生成 (画面下部)
+                const lane = getLaneInfo(pressedKey);
+                gameState.hitEffects.push({
+                    x: lane.x + lane.w / 2,
+                    y: canvas.height - HIT_ZONE_OFFSET,
+                    radius: 5,
+                    color: lane.color,
+                    alpha: 1
+                });
+
+                if (minDiff <= thresholdPerfect) {
+                    showJudgment('PERFECT!', '#ec4899'); // ピンク
+                    gameState.score += 100;
+                    gameState.combo += 1;
+                } else {
+                    showJudgment('GOOD!', '#3b82f6'); // ブルー
+                    gameState.score += 50;
+                    gameState.combo += 1;
+                }
+                updateUI();
+            }
+        }
+
+        // 判定文字の表示アニメーション
+        function showJudgment(text, color) {
+            judgmentDisplay.textContent = text;
+            judgmentDisplay.style.color = color;
+            judgmentDisplay.style.opacity = '1';
+            judgmentDisplay.style.transform = 'translate(-50%, -50%) scale(1.3) rotate(-5deg)';
+            
+            setTimeout(() => {
+                judgmentDisplay.style.opacity = '0';
+                judgmentDisplay.style.transform = 'translate(-50%, -50%) scale(1) rotate(0deg)';
+            }, 400);
+        }
+
+        function updateUI() {
+            scoreDisplay.textContent = String(gameState.score).padStart(5, '0');
+            comboDisplay.textContent = gameState.combo;
+            if(gameState.combo > gameState.maxCombo) gameState.maxCombo = gameState.combo;
+        }
+
+        // --- STREAMING_CHUNK:描画ループと進行管理... ---
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function gameLoop(timestamp) {
+            if (!gameState.isPlaying) return;
+
+            // プレイ時間の計算 (速度設定を加味)
+            const currentPlayTime = (timestamp - gameState.songStartTime) * gameState.speedMode;
+            const hitZoneY = canvas.height - HIT_ZONE_OFFSET;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 判定ラインの描画
+            ctx.beginPath();
+            ctx.moveTo(0, hitZoneY);
+            ctx.lineTo(canvas.width, hitZoneY);
+            ctx.strokeStyle = '#93c5fd'; // 水色
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // ノーツの更新と描画
+            let allFinished = true;
+            
+            // 白鍵用と黒鍵用に分けて描画（黒鍵が上になるように）
+            const drawNotesForType = (type) => {
+                for (let note of gameState.notes) {
+                    if (note.keyData.type !== type) continue;
+                    
+                    if (note.hit) continue; // ヒット済みは描画しない
+
+                    // 目標時間までの残り時間からY座標を逆算
+                    const timeRemaining = note.targetTime - currentPlayTime;
+                    
+                    // まだ画面外上部の場合は計算だけして次へ
+                    if (timeRemaining > NOTE_DROP_TIME) {
+                        allFinished = false;
+                        continue;
+                    }
+
+                    // 過ぎ去った場合のMiss判定
+                    if (timeRemaining < -300 && !note.missed) {
+                        note.missed = true;
+                        gameState.combo = 0;
+                        showJudgment('MISS', '#94a3b8');
+                        updateUI();
+                    }
+
+                    if (!note.missed) {
+                        allFinished = false; // まだアクティブなノーツがある
+                        
+                        // Y座標の計算 (timeRemainingが0のとき hitZoneY になる)
+                        const progress = 1 - (timeRemaining / NOTE_DROP_TIME);
+                        const y = hitZoneY * progress;
+
+                        const lane = getLaneInfo(note.keyData);
+                        const nw = lane.w * 0.8;
+                        const nh = 25; // ノーツの高さ
+                        const nx = lane.x + (lane.w - nw) / 2;
+                        
+                        // 角丸四角形でノーツを描画
+                        ctx.fillStyle = lane.color;
+                        ctx.strokeStyle = lane.border;
+                        ctx.lineWidth = 2;
+                        
+                        ctx.beginPath();
+                        ctx.roundRect(nx, y - nh, nw, nh, 8);
+                        ctx.fill();
+                        ctx.stroke();
+                    }
+                }
+            };
+
+            drawNotesForType('white');
+            drawNotesForType('black');
+
+            // エフェクトの更新と描画
+            for (let i = 0; i < gameState.hitEffects.length; i++) {
+                let effect = gameState.hitEffects[i];
+                effect.radius += 2;
+                effect.alpha -= 0.05;
+                
+                if (effect.alpha > 0) {
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = effect.color;
+                    ctx.globalAlpha = effect.alpha;
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+            gameState.hitEffects = gameState.hitEffects.filter(e => e.alpha > 0);
+
+            // 終了判定 (すべてのノーツを処理し終わったか)
+            if (allFinished && gameState.hitEffects.length === 0) {
+                endGame();
+                return;
+            }
+
+            gameState.animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            // AudioContextの初期化
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // 選択された曲と速度の取得
+            const songIndex = document.getElementById('song-select').value;
+            const song = SONGS[songIndex];
+            gameState.speedMode = parseFloat(document.getElementById('speed-select').value);
+
+            // 楽譜のパース
+            const parsedData = parseScoreData(song);
+            gameState.notes = parsedData.notes;
+            
+            // UI切替
+            startScreen.style.opacity = '0';
+            resultScreen.style.opacity = '0';
+            resultScreen.classList.add('hidden');
+            
+            setTimeout(() => {
+                startScreen.classList.add('hidden');
+                settingsUi.classList.add('hidden');
+                playInfo.classList.remove('hidden');
+                
+                // ゲーム状態のリセット
+                gameState.isPlaying = true;
+                gameState.score = 0;
+                gameState.combo = 0;
+                gameState.maxCombo = 0;
+                gameState.hitEffects = [];
+                updateUI();
+                
+                // 開始時間は少し遅らせる（最初のノーツが降ってくる余裕を作る）
+                gameState.songStartTime = performance.now() + NOTE_DROP_TIME;
+                
+                if (gameState.animationId) cancelAnimationFrame(gameState.animationId);
+                gameState.animationId = requestAnimationFrame(gameLoop);
+            }, 300);
+        }
+
+        function endGame() {
+            gameState.isPlaying = false;
+            cancelAnimationFrame(gameState.animationId);
+            
+            // リザルト画面の表示
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('final-combo').textContent = gameState.maxCombo;
+            
+            resultScreen.classList.remove('hidden');
+            // 少し遅らせてフェードイン
+            setTimeout(() => {
+                resultScreen.style.opacity = '1';
+                settingsUi.classList.remove('hidden');
+                playInfo.classList.add('hidden');
+            }, 50);
+        }
+
+        // イベントリスナーの登録
+        startBtn.addEventListener('click', startGame);
+        retryBtn.addEventListener('click', startGame);
+
+        window.addEventListener('load', () => {
+            buildPiano();
+            resizeCanvas();
+            // 初期描画
+            ctx.fillStyle = '#f0f9ff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+
+    </script>
+</body>
+</html>
