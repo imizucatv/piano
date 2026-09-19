@@ -68,29 +68,32 @@
         .hud-text { font-size: 1.5rem; font-weight: bold; color: var(--text); background: rgba(255,255,255,0.7); padding: 5px 15px; border-radius: 20px; }
         canvas { width: 100%; flex: 1; display: block; background: linear-gradient(to bottom, #FFF5E1, #FFDAB9); }
         
-        /* Piano Keyboard */
+        /* Piano Keyboard - タブレット向けに高さを45vhに拡大 */
         #keyboard {
-            height: 30vh; width: 100%; position: relative; display: flex;
+            height: 45vh; 
+            min-height: 250px;
+            width: 100%; position: relative; display: flex;
             background: #222; border-top: 5px solid var(--primary);
         }
         .key {
-            position: relative; border: 1px solid #ccc; border-radius: 0 0 5px 5px;
+            position: relative; border: 1px solid #ccc; border-radius: 0 0 8px 8px;
             cursor: pointer; box-sizing: border-box;
         }
         .white-key {
             background: var(--white-key); height: 100%; z-index: 1; flex: 1;
             box-shadow: inset 0 -3px 5px rgba(0,0,0,0.2);
         }
+        /* 黒鍵も少し太く（3.8%）して押しやすく */
         .black-key {
-            background: var(--black-key); height: 60%; width: 3%; position: absolute;
-            z-index: 2; transform: translateX(-50%); border-radius: 0 0 4px 4px;
+            background: var(--black-key); height: 60%; width: 3.8%; position: absolute;
+            z-index: 2; transform: translateX(-50%); border-radius: 0 0 6px 6px;
             box-shadow: inset 0 -3px 5px rgba(255,255,255,0.2);
         }
         .white-key.active, .black-key.active { background: var(--key-active); }
         
         /* Floating Text (Perfect, Good, Miss) */
         .feedback {
-            position: absolute; font-size: 2rem; font-weight: bold; pointer-events: none;
+            position: absolute; font-size: 2.5rem; font-weight: bold; pointer-events: none;
             animation: floatUp 0.8s ease-out forwards; z-index: 20; text-shadow: 2px 2px 2px white;
         }
         @keyframes floatUp {
@@ -163,8 +166,7 @@ for (let i = START_MIDI; i <= END_MIDI; i++) {
 }
 
 /**
- * 楽曲データのパース関数 (長い曲を効率的に作成するための仕組み)
- * "MIDI:拍数" の文字列からノーツ配列を生成します。0は休符。
+ * 楽曲データのパース関数
  */
 function parseSong(dataString, loops = 1) {
     const notes = [];
@@ -178,13 +180,13 @@ function parseSong(dataString, loops = 1) {
             if (m > 0) {
                 notes.push({ m, t: currentTime, d });
             }
-            currentTime += d; // 休符の場合も時間は進む
+            currentTime += d; 
         });
     }
     return notes;
 }
 
-// 15 Songs Library (Extended Versions for 1~2 mins play time)
+// 15 Songs Library
 const SONGS = [
     { title: "きらきら星 ⭐", notes: parseSong("60:1 60:1 67:1 67:1 69:1 69:1 67:2 65:1 65:1 64:1 64:1 62:1 62:1 60:2 67:1 67:1 65:1 65:1 64:1 64:1 62:2 67:1 67:1 65:1 65:1 64:1 64:1 62:2 60:1 60:1 67:1 67:1 69:1 69:1 67:2 65:1 65:1 64:1 64:1 62:1 62:1 60:2", 3) },
     { title: "ちょうちょう ⭐", notes: parseSong("67:1 64:1 64:2 65:1 62:1 62:2 60:1 62:1 64:1 65:1 67:1 67:1 67:2 67:1 64:1 64:2 65:1 62:1 62:2 60:1 64:1 67:1 67:1 64:1 64:1 64:2 62:1 62:1 62:1 62:1 62:1 64:1 65:2 64:1 64:1 64:1 64:1 64:1 65:1 67:2 67:1 64:1 64:2 65:1 62:1 62:2 60:1 64:1 67:1 67:1 64:1 64:1 64:2", 2) },
@@ -275,8 +277,8 @@ let animationId;
 let gameFinished = false;
 let finishTimer = null;
 
-const BEAT_DURATION = 600; // ms per beat (slightly faster default for longer songs)
-const FALL_TIME = 2000;    // ms for note to fall from top to bottom
+const BEAT_DURATION = 600; 
+const FALL_TIME = 2000;    
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
@@ -294,7 +296,6 @@ function handlePress(midi) {
     if (el) el.classList.add('active');
     playTone(midi);
     
-    // Check hit
     const hitTime = performance.now();
     let hitFound = false;
     
@@ -302,7 +303,7 @@ function handlePress(midi) {
         const note = activeNotes[i];
         if (note.midi === parseInt(midi) && !note.hit && !note.missed) {
             const timeDiff = Math.abs(hitTime - note.targetTime);
-            if (timeDiff < 200) { // Hit window
+            if (timeDiff < 200) { 
                 note.hit = true;
                 hitFound = true;
                 if (timeDiff < 60) {
@@ -400,7 +401,7 @@ function showFeedback(text, keyEl) {
     fb.style.color = text === 'Perfect!' ? '#FFD700' : (text === 'Good!' ? '#32CD32' : '#FF0000');
     
     const rect = keyEl.getBoundingClientRect();
-    fb.style.left = `${rect.left + rect.width/2 - 30}px`;
+    fb.style.left = `${rect.left + rect.width/2 - 40}px`;
     fb.style.bottom = `${window.innerHeight - rect.top + 10}px`;
     
     document.body.appendChild(fb);
@@ -430,7 +431,7 @@ function startGame() {
     maxCombo = 0;
     updateHUD();
     
-    startTime = performance.now() + 1500; // 1.5 sec delay before first note
+    startTime = performance.now() + 1500; 
     activeNotes = SONGS[songIdx].notes.map(n => ({
         midi: n.m,
         targetTime: startTime + (n.t * beatTime),
@@ -471,9 +472,9 @@ function gameLoop(now) {
         
         const timeDiff = note.targetTime - now;
         
-        if (timeDiff > FALL_TIME) return; // not visible yet
+        if (timeDiff > FALL_TIME) return; 
         
-        if (timeDiff < -200) { // missed
+        if (timeDiff < -200) { 
             note.missed = true;
             combo = 0;
             updateHUD();
@@ -493,7 +494,8 @@ function gameLoop(now) {
             ctx.fillStyle = 'rgba(135, 206, 235, 0.8)';
         } else {
             const prevWhiteIndex = whiteKeys.findIndex(wk => wk.midi === note.midi - 1);
-            w = (canvas.width / numWhiteKeys) * 0.6;
+            // 黒鍵のノーツ幅も画面に合わせて調整
+            w = (canvas.width / numWhiteKeys) * 0.7;
             x = (prevWhiteIndex + 1) * (canvas.width / numWhiteKeys) - (w / 2);
             ctx.fillStyle = 'rgba(255, 140, 0, 0.9)';
         }
