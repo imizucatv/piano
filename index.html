@@ -34,7 +34,7 @@
         label { font-size: 1.2rem; font-weight: bold; display: block; margin-bottom: 5px; color: var(--primary); }
         select {
             width: 100%; padding: 10px; font-size: 1.1rem; border: 2px solid var(--secondary);
-            border-radius: 8px; background: white; color: var(--text);
+            border-radius: 8px; background: white; color: var(--text); outline: none;
         }
         .btn {
             background: var(--primary); color: white; border: none; padding: 15px 40px;
@@ -49,12 +49,21 @@
         .result-stat { font-size: 1.5rem; margin: 10px 0; }
         .btn-group { display: flex; gap: 20px; justify-content: center; margin-top: 20px; }
         .btn-secondary { background: #87CEEB; box-shadow: 0 4px 0 #5F9EA0; }
+        
+        /* Quit Button */
+        #quit-btn {
+            position: absolute; top: 10px; right: 20px; z-index: 50;
+            background: #FF6347; color: white; border: none; padding: 8px 15px;
+            border-radius: 15px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 3px 0 #CD5C5C; font-size: 1rem;
+        }
+        #quit-btn:active { transform: translateY(3px); box-shadow: none; }
 
         /* Game Area */
         #game-container { flex: 1; position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
         #hud {
             position: absolute; top: 10px; left: 20px; right: 20px; z-index: 10;
-            display: flex; justify-content: space-between; pointer-events: none;
+            display: flex; justify-content: flex-start; gap: 20px; pointer-events: none;
         }
         .hud-text { font-size: 1.5rem; font-weight: bold; color: var(--text); background: rgba(255,255,255,0.7); padding: 5px 15px; border-radius: 20px; }
         canvas { width: 100%; flex: 1; display: block; background: linear-gradient(to bottom, #FFF5E1, #FFDAB9); }
@@ -104,9 +113,9 @@
         <div class="control-group">
             <label for="speed-select">スピード</label>
             <select id="speed-select">
-                <option value="0.5">0.5x (ゆっくり)</option>
+                <option value="0.5">0.5x (ゆっくり - 長めのプレイ)</option>
                 <option value="0.75">0.75x</option>
-                <option value="1.0" selected>1.0x (ふつう)</option>
+                <option value="1.0" selected>1.0x (ふつう - 1〜2分)</option>
                 <option value="1.25">1.25x</option>
                 <option value="1.5">1.5x (はやい)</option>
             </select>
@@ -134,6 +143,7 @@
             <div class="hud-text">Score: <span id="score-display">0</span></div>
             <div class="hud-text">Combo: <span id="combo-display">0</span></div>
         </div>
+        <button id="quit-btn">やめる</button>
         <canvas id="game-canvas"></canvas>
         <div id="keyboard"></div>
     </div>
@@ -146,31 +156,51 @@ const START_MIDI = 53; // F3
 const END_MIDI = 84;   // C6
 const KEYS = [];
 
-// Determine White/Black keys
 for (let i = START_MIDI; i <= END_MIDI; i++) {
     const noteInOctave = i % 12;
     const isBlack = [1, 3, 6, 8, 10].includes(noteInOctave);
     KEYS.push({ midi: i, isBlack: isBlack });
 }
 
-// 15 Songs Library (Simplified Melodies)
-// Format: [{ m: midi_note, t: time_in_beats, d: duration_in_beats }]
+/**
+ * 楽曲データのパース関数 (長い曲を効率的に作成するための仕組み)
+ * "MIDI:拍数" の文字列からノーツ配列を生成します。0は休符。
+ */
+function parseSong(dataString, loops = 1) {
+    const notes = [];
+    let currentTime = 0;
+    for (let i = 0; i < loops; i++) {
+        const parts = dataString.trim().split(/\s+/);
+        parts.forEach(p => {
+            const [midiStr, durationStr] = p.split(':');
+            const m = parseInt(midiStr);
+            const d = parseFloat(durationStr);
+            if (m > 0) {
+                notes.push({ m, t: currentTime, d });
+            }
+            currentTime += d; // 休符の場合も時間は進む
+        });
+    }
+    return notes;
+}
+
+// 15 Songs Library (Extended Versions for 1~2 mins play time)
 const SONGS = [
-    { title: "きらきら星 ⭐", notes: [{m:60,t:0,d:1},{m:60,t:1,d:1},{m:67,t:2,d:1},{m:67,t:3,d:1},{m:69,t:4,d:1},{m:69,t:5,d:1},{m:67,t:6,d:2}] },
-    { title: "ちょうちょう ⭐", notes: [{m:67,t:0,d:1},{m:64,t:1,d:1},{m:64,t:2,d:2},{m:65,t:4,d:1},{m:62,t:5,d:1},{m:62,t:6,d:2},{m:60,t:8,d:1},{m:62,t:9,d:1},{m:64,t:10,d:1},{m:65,t:11,d:1},{m:67,t:12,d:1},{m:67,t:13,d:1},{m:67,t:14,d:2}] },
-    { title: "かえるの合唱 ⭐", notes: [{m:60,t:0,d:1},{m:62,t:1,d:1},{m:64,t:2,d:1},{m:65,t:3,d:1},{m:64,t:4,d:1},{m:62,t:5,d:1},{m:60,t:6,d:2}] },
-    { title: "むすんでひらいて ⭐⭐", notes: [{m:64,t:0,d:1},{m:64,t:1,d:1},{m:62,t:2,d:1},{m:62,t:3,d:1},{m:60,t:4,d:2},{m:60,t:6,d:2},{m:67,t:8,d:1},{m:67,t:9,d:1},{m:65,t:10,d:1},{m:65,t:11,d:1},{m:64,t:12,d:4}] },
-    { title: "チューリップ ⭐⭐", notes: [{m:60,t:0,d:1},{m:62,t:1,d:1},{m:64,t:2,d:2},{m:60,t:4,d:1},{m:62,t:5,d:1},{m:64,t:6,d:2},{m:67,t:8,d:1},{m:64,t:9,d:1},{m:62,t:10,d:1},{m:60,t:11,d:1},{m:62,t:12,d:4}] },
-    { title: "ぶんぶんぶん ⭐⭐", notes: [{m:67,t:0,d:1},{m:64,t:1,d:1},{m:64,t:2,d:2},{m:65,t:4,d:1},{m:62,t:5,d:1},{m:62,t:6,d:2},{m:60,t:8,d:1},{m:62,t:9,d:1},{m:64,t:10,d:1},{m:65,t:11,d:1},{m:67,t:12,d:4}] },
-    { title: "どんぐりころころ ⭐⭐⭐", notes: [{m:67,t:0,d:1},{m:67,t:1,d:1},{m:64,t:2,d:1},{m:64,t:3,d:1},{m:67,t:4,d:1},{m:69,t:5,d:1},{m:67,t:6,d:2},{m:64,t:8,d:1},{m:64,t:9,d:1},{m:62,t:10,d:1},{m:62,t:11,d:1},{m:60,t:12,d:4}] },
-    { title: "森のくまさん ⭐⭐⭐", notes: [{m:60,t:0,d:1},{m:60,t:1,d:1},{m:60,t:2,d:1},{m:62,t:3,d:1},{m:64,t:4,d:2},{m:60,t:6,d:2},{m:67,t:8,d:1},{m:67,t:9,d:1},{m:67,t:10,d:1},{m:69,t:11,d:1},{m:67,t:12,d:4}] },
-    { title: "メリーさんのひつじ ⭐⭐⭐", notes: [{m:64,t:0,d:1},{m:62,t:1,d:1},{m:60,t:2,d:1},{m:62,t:3,d:1},{m:64,t:4,d:1},{m:64,t:5,d:1},{m:64,t:6,d:2},{m:62,t:8,d:1},{m:62,t:9,d:1},{m:62,t:10,d:2},{m:64,t:12,d:1},{m:67,t:13,d:1},{m:67,t:14,d:2}] },
-    { title: "歓喜の歌 ⭐⭐⭐⭐", notes: [{m:64,t:0,d:1},{m:64,t:1,d:1},{m:65,t:2,d:1},{m:67,t:3,d:1},{m:67,t:4,d:1},{m:65,t:5,d:1},{m:64,t:6,d:1},{m:62,t:7,d:1},{m:60,t:8,d:1},{m:60,t:9,d:1},{m:62,t:10,d:1},{m:64,t:11,d:1},{m:64,t:12,d:1.5},{m:62,t:13.5,d:0.5},{m:62,t:14,d:2}] },
-    { title: "アメイジング・グレイス ⭐⭐⭐⭐", notes: [{m:60,t:0,d:1},{m:65,t:1,d:2},{m:69,t:3,d:0.5},{m:65,t:3.5,d:0.5},{m:69,t:4,d:2},{m:67,t:6,d:1},{m:65,t:7,d:2},{m:60,t:9,d:1}] },
-    { title: "聖者の行進 ⭐⭐⭐⭐", notes: [{m:60,t:0,d:1},{m:64,t:1,d:1},{m:65,t:2,d:1},{m:67,t:3,d:3},{m:60,t:6,d:1},{m:64,t:7,d:1},{m:65,t:8,d:1},{m:67,t:9,d:3}] },
-    { title: "エリーゼのために ⭐⭐⭐⭐⭐", notes: [{m:76,t:0,d:0.5},{m:75,t:0.5,d:0.5},{m:76,t:1,d:0.5},{m:75,t:1.5,d:0.5},{m:76,t:2,d:0.5},{m:71,t:2.5,d:0.5},{m:74,t:3,d:0.5},{m:72,t:3.5,d:0.5},{m:69,t:4,d:2}] },
-    { title: "トルコ行進曲 ⭐⭐⭐⭐⭐", notes: [{m:71,t:0,d:0.5},{m:72,t:0.5,d:0.5},{m:74,t:1,d:1},{m:71,t:2,d:0.5},{m:72,t:2.5,d:0.5},{m:74,t:3,d:1},{m:71,t:4,d:0.5},{m:72,t:4.5,d:0.5},{m:74,t:5,d:0.5},{m:72,t:5.5,d:0.5},{m:71,t:6,d:0.5},{m:69,t:6.5,d:0.5},{m:67,t:7,d:1}] },
-    { title: "ねこふんじゃった ⭐⭐⭐⭐⭐", notes: [{m:66,t:0,d:0.5},{m:68,t:0.5,d:0.5},{m:61,t:1,d:1},{m:66,t:2,d:1},{m:61,t:3,d:1},{m:66,t:4,d:1},{m:66,t:5,d:0.5},{m:68,t:5.5,d:0.5},{m:61,t:6,d:1},{m:66,t:7,d:1},{m:61,t:8,d:1},{m:66,t:9,d:1}] }
+    { title: "きらきら星 ⭐", notes: parseSong("60:1 60:1 67:1 67:1 69:1 69:1 67:2 65:1 65:1 64:1 64:1 62:1 62:1 60:2 67:1 67:1 65:1 65:1 64:1 64:1 62:2 67:1 67:1 65:1 65:1 64:1 64:1 62:2 60:1 60:1 67:1 67:1 69:1 69:1 67:2 65:1 65:1 64:1 64:1 62:1 62:1 60:2", 3) },
+    { title: "ちょうちょう ⭐", notes: parseSong("67:1 64:1 64:2 65:1 62:1 62:2 60:1 62:1 64:1 65:1 67:1 67:1 67:2 67:1 64:1 64:2 65:1 62:1 62:2 60:1 64:1 67:1 67:1 64:1 64:1 64:2 62:1 62:1 62:1 62:1 62:1 64:1 65:2 64:1 64:1 64:1 64:1 64:1 65:1 67:2 67:1 64:1 64:2 65:1 62:1 62:2 60:1 64:1 67:1 67:1 64:1 64:1 64:2", 2) },
+    { title: "かえるの合唱 ⭐", notes: parseSong("60:1 62:1 64:1 65:1 64:1 62:1 60:2 64:1 65:1 67:1 69:1 67:1 65:1 64:2 60:2 60:2 60:2 60:2 60:0.5 60:0.5 62:0.5 62:0.5 64:0.5 64:0.5 65:0.5 65:0.5 64:1 62:1 60:2", 4) },
+    { title: "むすんでひらいて ⭐⭐", notes: parseSong("64:1 64:1 62:1 62:1 60:2 60:2 67:1 67:1 65:1 65:1 64:4 67:1 67:1 69:1 69:1 67:2 67:2 64:1 64:1 65:1 65:1 64:4 64:1 64:1 62:1 62:1 60:2 60:2 67:1 67:1 65:1 65:1 64:4", 3) },
+    { title: "チューリップ ⭐⭐", notes: parseSong("60:1 62:1 64:2 60:1 62:1 64:2 67:1 64:1 62:1 60:1 62:4 60:1 62:1 64:2 60:1 62:1 64:2 67:1 64:1 62:1 60:1 62:4 67:1 67:1 64:1 67:1 69:1 69:1 67:2 64:1 64:1 62:1 62:1 60:4", 3) },
+    { title: "ぶんぶんぶん ⭐⭐", notes: parseSong("67:1 64:1 64:2 65:1 62:1 62:2 60:1 62:1 64:1 65:1 67:4 62:1 62:1 62:1 64:1 65:4 64:1 64:1 64:1 65:1 67:4 67:1 64:1 64:2 65:1 62:1 62:2 60:1 64:1 60:1 64:1 60:4", 3) },
+    { title: "どんぐりころころ ⭐⭐⭐", notes: parseSong("67:1 67:1 64:1 64:1 67:1 69:1 67:2 64:1 64:1 62:1 62:1 60:4 67:1 67:1 64:1 64:1 67:1 69:1 67:2 64:1 64:1 62:1 62:1 60:4 69:1 69:1 69:1 69:1 67:1 67:1 64:2 69:1 69:1 69:1 69:1 67:4 67:1 67:1 64:1 64:1 67:1 69:1 67:2 64:1 64:1 62:1 62:1 60:4", 3) },
+    { title: "森のくまさん ⭐⭐⭐", notes: parseSong("60:1 60:1 60:1 62:1 64:2 60:2 67:1 67:1 67:1 69:1 67:4 64:1 64:1 64:1 65:1 67:2 64:2 69:1 69:1 69:1 71:1 69:4 67:1 67:1 67:1 65:1 64:2 62:2 60:1 60:1 62:1 64:1 67:4 67:2 69:2 67:2 64:2 60:2 62:2 60:4", 3) },
+    { title: "メリーさんのひつじ ⭐⭐⭐", notes: parseSong("64:1 62:1 60:1 62:1 64:1 64:1 64:2 62:1 62:1 62:2 64:1 67:1 67:2 64:1 62:1 60:1 62:1 64:1 64:1 64:2 62:1 62:1 64:1 62:1 60:4", 4) },
+    { title: "歓喜の歌 ⭐⭐⭐⭐", notes: parseSong("64:1 64:1 65:1 67:1 67:1 65:1 64:1 62:1 60:1 60:1 62:1 64:1 64:1.5 62:0.5 62:2 64:1 64:1 65:1 67:1 67:1 65:1 64:1 62:1 60:1 60:1 62:1 64:1 62:1.5 60:0.5 60:2 62:1 62:1 64:1 60:1 62:1 64:0.5 65:0.5 64:1 60:1 62:1 64:0.5 65:0.5 64:1 62:1 60:1 62:1 55:2 64:1 64:1 65:1 67:1 67:1 65:1 64:1 62:1 60:1 60:1 62:1 64:1 62:1.5 60:0.5 60:2", 3) },
+    { title: "アメイジング・グレイス ⭐⭐⭐⭐", notes: parseSong("60:1 65:2 69:0.5 65:0.5 69:2 67:1 65:2 60:1 60:1 65:2 69:0.5 65:0.5 69:2 72:1 72:3 69:1 72:2 69:0.5 72:0.5 69:2 65:1 60:2 60:1 65:2 69:0.5 65:0.5 69:2 67:1 65:3 0:1", 4) },
+    { title: "聖者の行進 ⭐⭐⭐⭐", notes: parseSong("60:1 64:1 65:1 67:3 0:1 60:1 64:1 65:1 67:3 0:1 60:1 64:1 65:1 67:1 64:1 60:1 64:1 62:3 0:1 64:1 64:1 62:1 60:3 60:1 64:1 67:2 67:1 65:3 0:1 64:1 65:1 67:1 64:1 60:1 62:1 60:4", 3) },
+    { title: "エリーゼのために ⭐⭐⭐⭐⭐", notes: parseSong("76:0.5 75:0.5 76:0.5 75:0.5 76:0.5 71:0.5 74:0.5 72:0.5 69:2 0:0.5 60:0.5 64:0.5 69:0.5 71:2 0:0.5 64:0.5 68:0.5 71:0.5 72:2 0:0.5 64:0.5 76:0.5 75:0.5 76:0.5 75:0.5 76:0.5 71:0.5 74:0.5 72:0.5 69:2 0:0.5 60:0.5 64:0.5 69:0.5 71:2 0:0.5 64:0.5 72:0.5 71:0.5 69:4", 5) },
+    { title: "トルコ行進曲 ⭐⭐⭐⭐⭐", notes: parseSong("71:0.5 72:0.5 74:1 71:0.5 72:0.5 74:1 71:0.5 72:0.5 74:0.5 72:0.5 71:0.5 69:0.5 67:2 67:0.5 69:0.5 71:1 67:0.5 69:0.5 71:1 67:0.5 69:0.5 71:0.5 69:0.5 67:0.5 66:0.5 64:2 71:0.5 72:0.5 74:1 71:0.5 72:0.5 74:1 71:0.5 72:0.5 74:0.5 72:0.5 71:0.5 69:0.5 67:2 74:1 71:1 72:1 69:1 67:4", 4) },
+    { title: "ねこふんじゃった ⭐⭐⭐⭐⭐", notes: parseSong("66:0.5 68:0.5 61:1 66:1 61:1 66:1 66:0.5 68:0.5 61:1 66:1 61:1 66:1 66:0.5 68:0.5 63:1 68:1 63:1 68:1 68:0.5 70:0.5 63:1 68:1 63:1 68:1 68:0.5 70:0.5 63:1 68:1 63:1 68:1 68:0.5 70:0.5 63:1 68:1 63:1 68:1 68:0.5 70:0.5 61:1 66:1 61:1 66:1 66:0.5 68:0.5 61:1 66:1 61:1 66:4", 3) }
 ];
 
 // Audio Context setup
@@ -221,7 +251,6 @@ KEYS.forEach((key) => {
     
     if (key.isBlack) {
         el.classList.add('black-key');
-        // Find position based on previous white key
         const prevWhiteIndex = whiteKeys.findIndex(wk => wk.midi === key.midi - 1);
         const leftPercent = ((prevWhiteIndex + 1) / numWhiteKeys) * 100;
         el.style.left = `${leftPercent}%`;
@@ -236,7 +265,6 @@ KEYS.forEach((key) => {
 
 // Game State
 let isPlaying = false;
-let currentSongNotes = [];
 let activeNotes = [];
 let startTime = 0;
 let score = 0;
@@ -247,7 +275,7 @@ let animationId;
 let gameFinished = false;
 let finishTimer = null;
 
-const BEAT_DURATION = 800; // ms per beat at 1.0x speed
+const BEAT_DURATION = 600; // ms per beat (slightly faster default for longer songs)
 const FALL_TIME = 2000;    // ms for note to fall from top to bottom
 
 const canvas = document.getElementById('game-canvas');
@@ -272,12 +300,12 @@ function handlePress(midi) {
     
     for (let i = 0; i < activeNotes.length; i++) {
         const note = activeNotes[i];
-        if (note.midi === parseInt(midi) && !note.hit) {
+        if (note.midi === parseInt(midi) && !note.hit && !note.missed) {
             const timeDiff = Math.abs(hitTime - note.targetTime);
             if (timeDiff < 200) { // Hit window
                 note.hit = true;
                 hitFound = true;
-                if (timeDiff < 50) {
+                if (timeDiff < 60) {
                     showFeedback("Perfect!", el);
                     score += 100;
                 } else {
@@ -287,12 +315,9 @@ function handlePress(midi) {
                 combo++;
                 if (combo > maxCombo) maxCombo = combo;
                 updateHUD();
-                break; // hit only one note per press
+                break;
             }
         }
-    }
-    if (!hitFound) {
-       // Optional: Miss behavior for wrong presses
     }
 }
 
@@ -301,7 +326,7 @@ function handleRelease(midi) {
     if (el) el.classList.remove('active');
 }
 
-// Touch & Mouse events for keyboard
+// Touch & Mouse events
 const activeTouches = new Map();
 
 keyboardDiv.addEventListener('touchstart', (e) => {
@@ -405,8 +430,7 @@ function startGame() {
     maxCombo = 0;
     updateHUD();
     
-    // Prepare notes
-    startTime = performance.now() + 1000; // start 1 sec later
+    startTime = performance.now() + 1500; // 1.5 sec delay before first note
     activeNotes = SONGS[songIdx].notes.map(n => ({
         midi: n.m,
         targetTime: startTime + (n.t * beatTime),
@@ -427,7 +451,7 @@ function gameLoop(now) {
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw lane separators based on white keys
+    // Draw lane separators
     ctx.strokeStyle = 'rgba(0,0,0,0.05)';
     ctx.lineWidth = 1;
     const whiteKeyWidth = canvas.width / numWhiteKeys;
@@ -458,10 +482,7 @@ function gameLoop(now) {
             return;
         }
         
-        // Calculate position
         const y = canvas.height - (timeDiff / FALL_TIME) * canvas.height;
-        
-        // Find x and width based on piano layout
         const keyInfo = KEYS.find(k => k.midi === note.midi);
         let x, w;
         
@@ -469,22 +490,20 @@ function gameLoop(now) {
             const idx = whiteKeys.findIndex(wk => wk.midi === note.midi);
             w = canvas.width / numWhiteKeys;
             x = idx * w;
-            ctx.fillStyle = 'rgba(135, 206, 235, 0.8)'; // Blue for white keys
+            ctx.fillStyle = 'rgba(135, 206, 235, 0.8)';
         } else {
             const prevWhiteIndex = whiteKeys.findIndex(wk => wk.midi === note.midi - 1);
-            w = (canvas.width / numWhiteKeys) * 0.6; // Black key width
+            w = (canvas.width / numWhiteKeys) * 0.6;
             x = (prevWhiteIndex + 1) * (canvas.width / numWhiteKeys) - (w / 2);
-            ctx.fillStyle = 'rgba(255, 140, 0, 0.9)'; // Orange for black keys
+            ctx.fillStyle = 'rgba(255, 140, 0, 0.9)';
         }
         
-        // Draw note block
         ctx.fillRect(x + 2, y - 20, w - 4, 20);
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.strokeRect(x + 2, y - 20, w - 4, 20);
     });
     
-    // Check game end
     if (allNotesDone && !gameFinished) {
         gameFinished = true;
         finishTimer = setTimeout(showResult, 2000);
@@ -505,12 +524,19 @@ function showResult() {
     document.getElementById('result-screen').classList.remove('hidden');
 }
 
-// Event Listeners for UI
-document.getElementById('start-btn').addEventListener('click', startGame);
+function quitGame() {
+    isPlaying = false;
+    cancelAnimationFrame(animationId);
+    if(finishTimer) clearTimeout(finishTimer);
+    
+    document.getElementById('game-container').classList.add('hidden');
+    document.getElementById('menu-screen').classList.remove('hidden');
+}
 
-document.getElementById('retry-btn').addEventListener('click', () => {
-    startGame();
-});
+// Event Listeners
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('retry-btn').addEventListener('click', startGame);
+document.getElementById('quit-btn').addEventListener('click', quitGame);
 
 document.getElementById('back-btn').addEventListener('click', () => {
     document.getElementById('result-screen').classList.add('hidden');
@@ -518,7 +544,7 @@ document.getElementById('back-btn').addEventListener('click', () => {
     document.getElementById('menu-screen').classList.remove('hidden');
 });
 
-// Initial Resize
+// Initial Setup
 resizeCanvas();
 </script>
 </body>
