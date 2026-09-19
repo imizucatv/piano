@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TAKESHI PIANO</title>
+    <style>
+        :root {
+            --primary: #FF8C00;
+            --secondary: #FFD700;
+            --bg: #FFF5E1;
+            --text: #5C4033;
+            --white-key: #FFFFFF;
+            --black-key: #333333;
+            --key-active: #FFB6C1;
+        }
+        * { box-sizing: border-box; touch-action: none; user-select: none; }
+        body {
+            margin: 0; padding: 0; background-color: var(--bg);
+            font-family: 'Hiragino Maru Gothic ProN', 'Rounded M+ 1c', sans-serif;
+            color: var(--text); overflow: hidden; display: flex; flex-direction: column;
+            height: 100vh; width: 100vw;
+        }
+        /* UI Screens */
+        #menu-screen, #result-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 245, 225, 0.95);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 100;
+        }
+        .hidden { display: none !important; }
+        h1 { font-size: 3rem; color: var(--primary); text-shadow: 2px 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .control-group { margin: 10px 0; background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); width: 80%; max-width: 500px;}
+        label { font-size: 1.2rem; font-weight: bold; display: block; margin-bottom: 5px; color: var(--primary); }
+        select {
+            width: 100%; padding: 10px; font-size: 1.1rem; border: 2px solid var(--secondary);
+            border-radius: 8px; background: white; color: var(--text);
+        }
+        .btn {
+            background: var(--primary); color: white; border: none; padding: 15px 40px;
+            font-size: 1.5rem; border-radius: 30px; cursor: pointer; font-weight: bold;
+            box-shadow: 0 4px 0 #CC7000; margin-top: 20px; transition: transform 0.1s;
+        }
+        .btn:active { transform: translateY(4px); box-shadow: none; }
+        
+        /* Result Screen Specifics */
+        #result-box { text-align: center; background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        #result-title { font-size: 2.5rem; color: var(--primary); margin-bottom: 10px; }
+        .result-stat { font-size: 1.5rem; margin: 10px 0; }
+        .btn-group { display: flex; gap: 20px; justify-content: center; margin-top: 20px; }
+        .btn-secondary { background: #87CEEB; box-shadow: 0 4px 0 #5F9EA0; }
+
+        /* Game Area */
+        #game-container { flex: 1; position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; }
+        #hud {
+            position: absolute; top: 10px; left: 20px; right: 20px; z-index: 10;
+            display: flex; justify-content: space-between; pointer-events: none;
+        }
+        .hud-text { font-size: 1.5rem; font-weight: bold; color: var(--text); background: rgba(255,255,255,0.7); padding: 5px 15px; border-radius: 20px; }
+        canvas { width: 100%; flex: 1; display: block; background: linear-gradient(to bottom, #FFF5E1, #FFDAB9); }
+        
+        /* Piano Keyboard */
+        #keyboard {
+            height: 30vh; width: 100%; position: relative; display: flex;
+            background: #222; border-top: 5px solid var(--primary);
+        }
+        .key {
+            position: relative; border: 1px solid #ccc; border-radius: 0 0 5px 5px;
+            cursor: pointer; box-sizing: border-box;
+        }
+        .white-key {
+            background: var(--white-key); height: 100%; z-index: 1; flex: 1;
+            box-shadow: inset 0 -3px 5px rgba(0,0,0,0.2);
+        }
+        .black-key {
+            background: var(--black-key); height: 60%; width: 3%; position: absolute;
+            z-index: 2; transform: translateX(-50%); border-radius: 0 0 4px 4px;
+            box-shadow: inset 0 -3px 5px rgba(255,255,255,0.2);
+        }
+        .white-key.active, .black-key.active { background: var(--key-active); }
+        
+        /* Floating Text (Perfect, Good, Miss) */
+        .feedback {
+            position: absolute; font-size: 2rem; font-weight: bold; pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards; z-index: 20; text-shadow: 2px 2px 2px white;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(1.2); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Start Menu -->
+    <div id="menu-screen">
+        <h1>🎹 TAKESHI PIANO 🎹</h1>
+        
+        <div class="control-group">
+            <label for="song-select">曲をえらぶ</label>
+            <select id="song-select"></select>
+        </div>
+
+        <div class="control-group">
+            <label for="speed-select">スピード</label>
+            <select id="speed-select">
+                <option value="0.5">0.5x (ゆっくり)</option>
+                <option value="0.75">0.75x</option>
+                <option value="1.0" selected>1.0x (ふつう)</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x (はやい)</option>
+            </select>
+        </div>
+
+        <button class="btn" id="start-btn">スタート！</button>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result-screen" class="hidden">
+        <div id="result-box">
+            <div id="result-title">クリア！🎉</div>
+            <div class="result-stat">スコア: <span id="final-score">0</span></div>
+            <div class="result-stat">最大コンボ: <span id="max-combo">0</span></div>
+            <div class="btn-group">
+                <button class="btn" id="retry-btn">もう一度</button>
+                <button class="btn btn-secondary" id="back-btn">曲をえらぶ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Area -->
+    <div id="game-container" class="hidden">
+        <div id="hud">
+            <div class="hud-text">Score: <span id="score-display">0</span></div>
+            <div class="hud-text">Combo: <span id="combo-display">0</span></div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div id="keyboard"></div>
+    </div>
+
+<script>
+/**
+ * 32 Keys: F3(53) to C6(84)
+ */
+const START_MIDI = 53; // F3
+const END_MIDI = 84;   // C6
+const KEYS = [];
+
+// Determine White/Black keys
+for (let i = START_MIDI; i <= END_MIDI; i++) {
+    const noteInOctave = i % 12;
+    const isBlack = [1, 3, 6, 8, 10].includes(noteInOctave);
+    KEYS.push({ midi: i, isBlack: isBlack });
+}
+
+// 15 Songs Library (Simplified Melodies)
+// Format: [{ m: midi_note, t: time_in_beats, d: duration_in_beats }]
+const SONGS = [
+    { title: "きらきら星 ⭐", notes: [{m:60,t:0,d:1},{m:60,t:1,d:1},{m:67,t:2,d:1},{m:67,t:3,d:1},{m:69,t:4,d:1},{m:69,t:5,d:1},{m:67,t:6,d:2}] },
+    { title: "ちょうちょう ⭐", notes: [{m:67,t:0,d:1},{m:64,t:1,d:1},{m:64,t:2,d:2},{m:65,t:4,d:1},{m:62,t:5,d:1},{m:62,t:6,d:2},{m:60,t:8,d:1},{m:62,t:9,d:1},{m:64,t:10,d:1},{m:65,t:11,d:1},{m:67,t:12,d:1},{m:67,t:13,d:1},{m:67,t:14,d:2}] },
+    { title: "かえるの合唱 ⭐", notes: [{m:60,t:0,d:1},{m:62,t:1,d:1},{m:64,t:2,d:1},{m:65,t:3,d:1},{m:64,t:4,d:1},{m:62,t:5,d:1},{m:60,t:6,d:2}] },
+    { title: "むすんでひらいて ⭐⭐", notes: [{m:64,t:0,d:1},{m:64,t:1,d:1},{m:62,t:2,d:1},{m:62,t:3,d:1},{m:60,t:4,d:2},{m:60,t:6,d:2},{m:67,t:8,d:1},{m:67,t:9,d:1},{m:65,t:10,d:1},{m:65,t:11,d:1},{m:64,t:12,d:4}] },
+    { title: "チューリップ ⭐⭐", notes: [{m:60,t:0,d:1},{m:62,t:1,d:1},{m:64,t:2,d:2},{m:60,t:4,d:1},{m:62,t:5,d:1},{m:64,t:6,d:2},{m:67,t:8,d:1},{m:64,t:9,d:1},{m:62,t:10,d:1},{m:60,t:11,d:1},{m:62,t:12,d:4}] },
+    { title: "ぶんぶんぶん ⭐⭐", notes: [{m:67,t:0,d:1},{m:64,t:1,d:1},{m:64,t:2,d:2},{m:65,t:4,d:1},{m:62,t:5,d:1},{m:62,t:6,d:2},{m:60,t:8,d:1},{m:62,t:9,d:1},{m:64,t:10,d:1},{m:65,t:11,d:1},{m:67,t:12,d:4}] },
+    { title: "どんぐりころころ ⭐⭐⭐", notes: [{m:67,t:0,d:1},{m:67,t:1,d:1},{m:64,t:2,d:1},{m:64,t:3,d:1},{m:67,t:4,d:1},{m:69,t:5,d:1},{m:67,t:6,d:2},{m:64,t:8,d:1},{m:64,t:9,d:1},{m:62,t:10,d:1},{m:62,t:11,d:1},{m:60,t:12,d:4}] },
+    { title: "森のくまさん ⭐⭐⭐", notes: [{m:60,t:0,d:1},{m:60,t:1,d:1},{m:60,t:2,d:1},{m:62,t:3,d:1},{m:64,t:4,d:2},{m:60,t:6,d:2},{m:67,t:8,d:1},{m:67,t:9,d:1},{m:67,t:10,d:1},{m:69,t:11,d:1},{m:67,t:12,d:4}] },
+    { title: "メリーさんのひつじ ⭐⭐⭐", notes: [{m:64,t:0,d:1},{m:62,t:1,d:1},{m:60,t:2,d:1},{m:62,t:3,d:1},{m:64,t:4,d:1},{m:64,t:5,d:1},{m:64,t:6,d:2},{m:62,t:8,d:1},{m:62,t:9,d:1},{m:62,t:10,d:2},{m:64,t:12,d:1},{m:67,t:13,d:1},{m:67,t:14,d:2}] },
+    { title: "歓喜の歌 ⭐⭐⭐⭐", notes: [{m:64,t:0,d:1},{m:64,t:1,d:1},{m:65,t:2,d:1},{m:67,t:3,d:1},{m:67,t:4,d:1},{m:65,t:5,d:1},{m:64,t:6,d:1},{m:62,t:7,d:1},{m:60,t:8,d:1},{m:60,t:9,d:1},{m:62,t:10,d:1},{m:64,t:11,d:1},{m:64,t:12,d:1.5},{m:62,t:13.5,d:0.5},{m:62,t:14,d:2}] },
+    { title: "アメイジング・グレイス ⭐⭐⭐⭐", notes: [{m:60,t:0,d:1},{m:65,t:1,d:2},{m:69,t:3,d:0.5},{m:65,t:3.5,d:0.5},{m:69,t:4,d:2},{m:67,t:6,d:1},{m:65,t:7,d:2},{m:60,t:9,d:1}] },
+    { title: "聖者の行進 ⭐⭐⭐⭐", notes: [{m:60,t:0,d:1},{m:64,t:1,d:1},{m:65,t:2,d:1},{m:67,t:3,d:3},{m:60,t:6,d:1},{m:64,t:7,d:1},{m:65,t:8,d:1},{m:67,t:9,d:3}] },
+    { title: "エリーゼのために ⭐⭐⭐⭐⭐", notes: [{m:76,t:0,d:0.5},{m:75,t:0.5,d:0.5},{m:76,t:1,d:0.5},{m:75,t:1.5,d:0.5},{m:76,t:2,d:0.5},{m:71,t:2.5,d:0.5},{m:74,t:3,d:0.5},{m:72,t:3.5,d:0.5},{m:69,t:4,d:2}] },
+    { title: "トルコ行進曲 ⭐⭐⭐⭐⭐", notes: [{m:71,t:0,d:0.5},{m:72,t:0.5,d:0.5},{m:74,t:1,d:1},{m:71,t:2,d:0.5},{m:72,t:2.5,d:0.5},{m:74,t:3,d:1},{m:71,t:4,d:0.5},{m:72,t:4.5,d:0.5},{m:74,t:5,d:0.5},{m:72,t:5.5,d:0.5},{m:71,t:6,d:0.5},{m:69,t:6.5,d:0.5},{m:67,t:7,d:1}] },
+    { title: "ねこふんじゃった ⭐⭐⭐⭐⭐", notes: [{m:66,t:0,d:0.5},{m:68,t:0.5,d:0.5},{m:61,t:1,d:1},{m:66,t:2,d:1},{m:61,t:3,d:1},{m:66,t:4,d:1},{m:66,t:5,d:0.5},{m:68,t:5.5,d:0.5},{m:61,t:6,d:1},{m:66,t:7,d:1},{m:61,t:8,d:1},{m:66,t:9,d:1}] }
+];
+
+// Audio Context setup
+let audioCtx;
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+function playTone(midi) {
+    if(!audioCtx) return;
+    const freq = 440 * Math.pow(2, (midi - 69) / 12);
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    
+    gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 1.5);
+}
+
+// Build UI Elements
+const selectSong = document.getElementById('song-select');
+SONGS.forEach((song, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.innerText = song.title;
+    selectSong.appendChild(opt);
+});
+
+// Build Keyboard
+const keyboardDiv = document.getElementById('keyboard');
+const keyElements = {}; 
+const whiteKeys = KEYS.filter(k => !k.isBlack);
+const numWhiteKeys = whiteKeys.length;
+
+KEYS.forEach((key) => {
+    const el = document.createElement('div');
+    el.classList.add('key');
+    el.dataset.midi = key.midi;
+    
+    if (key.isBlack) {
+        el.classList.add('black-key');
+        // Find position based on previous white key
+        const prevWhiteIndex = whiteKeys.findIndex(wk => wk.midi === key.midi - 1);
+        const leftPercent = ((prevWhiteIndex + 1) / numWhiteKeys) * 100;
+        el.style.left = `${leftPercent}%`;
+        keyboardDiv.appendChild(el);
+    } else {
+        el.classList.add('white-key');
+        keyboardDiv.appendChild(el);
+    }
+    
+    keyElements[key.midi] = el;
+});
+
+// Game State
+let isPlaying = false;
+let currentSongNotes = [];
+let activeNotes = [];
+let startTime = 0;
+let score = 0;
+let combo = 0;
+let maxCombo = 0;
+let speedMult = 1.0;
+let animationId;
+let gameFinished = false;
+let finishTimer = null;
+
+const BEAT_DURATION = 800; // ms per beat at 1.0x speed
+const FALL_TIME = 2000;    // ms for note to fall from top to bottom
+
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight - keyboardDiv.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+
+// Controls
+function handlePress(midi) {
+    if (!isPlaying || gameFinished) return;
+    const el = keyElements[midi];
+    if (el) el.classList.add('active');
+    playTone(midi);
+    
+    // Check hit
+    const hitTime = performance.now();
+    let hitFound = false;
+    
+    for (let i = 0; i < activeNotes.length; i++) {
+        const note = activeNotes[i];
+        if (note.midi === parseInt(midi) && !note.hit) {
+            const timeDiff = Math.abs(hitTime - note.targetTime);
+            if (timeDiff < 200) { // Hit window
+                note.hit = true;
+                hitFound = true;
+                if (timeDiff < 50) {
+                    showFeedback("Perfect!", el);
+                    score += 100;
+                } else {
+                    showFeedback("Good!", el);
+                    score += 50;
+                }
+                combo++;
+                if (combo > maxCombo) maxCombo = combo;
+                updateHUD();
+                break; // hit only one note per press
+            }
+        }
+    }
+    if (!hitFound) {
+       // Optional: Miss behavior for wrong presses
+    }
+}
+
+function handleRelease(midi) {
+    const el = keyElements[midi];
+    if (el) el.classList.remove('active');
+}
+
+// Touch & Mouse events for keyboard
+const activeTouches = new Map();
+
+keyboardDiv.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    initAudio();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (target && target.classList.contains('key')) {
+            const midi = target.dataset.midi;
+            activeTouches.set(touch.identifier, midi);
+            handlePress(midi);
+        }
+    }
+}, {passive: false});
+
+keyboardDiv.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        const oldMidi = activeTouches.get(touch.identifier);
+        
+        if (target && target.classList.contains('key')) {
+            const newMidi = target.dataset.midi;
+            if (oldMidi !== newMidi) {
+                if (oldMidi) handleRelease(oldMidi);
+                activeTouches.set(touch.identifier, newMidi);
+                handlePress(newMidi);
+            }
+        } else if (oldMidi) {
+            handleRelease(oldMidi);
+            activeTouches.delete(touch.identifier);
+        }
+    }
+}, {passive: false});
+
+keyboardDiv.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        const midi = activeTouches.get(touch.identifier);
+        if (midi) {
+            handleRelease(midi);
+            activeTouches.delete(touch.identifier);
+        }
+    }
+});
+
+keyboardDiv.addEventListener('mousedown', (e) => {
+    initAudio();
+    if (e.target.classList.contains('key')) {
+        handlePress(e.target.dataset.midi);
+    }
+});
+keyboardDiv.addEventListener('mouseup', (e) => {
+    if (e.target.classList.contains('key')) {
+        handleRelease(e.target.dataset.midi);
+    }
+});
+keyboardDiv.addEventListener('mouseleave', (e) => {
+    if (e.target.classList.contains('key')) {
+        handleRelease(e.target.dataset.midi);
+    }
+});
+
+function showFeedback(text, keyEl) {
+    const fb = document.createElement('div');
+    fb.classList.add('feedback');
+    fb.innerText = text;
+    fb.style.color = text === 'Perfect!' ? '#FFD700' : (text === 'Good!' ? '#32CD32' : '#FF0000');
+    
+    const rect = keyEl.getBoundingClientRect();
+    fb.style.left = `${rect.left + rect.width/2 - 30}px`;
+    fb.style.bottom = `${window.innerHeight - rect.top + 10}px`;
+    
+    document.body.appendChild(fb);
+    setTimeout(() => fb.remove(), 800);
+}
+
+function updateHUD() {
+    document.getElementById('score-display').innerText = score;
+    document.getElementById('combo-display').innerText = combo;
+}
+
+// Game Loop
+function startGame() {
+    initAudio();
+    document.getElementById('menu-screen').classList.add('hidden');
+    document.getElementById('result-screen').classList.add('hidden');
+    document.getElementById('game-container').classList.remove('hidden');
+    
+    resizeCanvas();
+    
+    const songIdx = selectSong.value;
+    speedMult = parseFloat(document.getElementById('speed-select').value);
+    const beatTime = BEAT_DURATION / speedMult;
+    
+    score = 0;
+    combo = 0;
+    maxCombo = 0;
+    updateHUD();
+    
+    // Prepare notes
+    startTime = performance.now() + 1000; // start 1 sec later
+    activeNotes = SONGS[songIdx].notes.map(n => ({
+        midi: n.m,
+        targetTime: startTime + (n.t * beatTime),
+        duration: n.d,
+        hit: false,
+        missed: false
+    }));
+    
+    isPlaying = true;
+    gameFinished = false;
+    if(finishTimer) clearTimeout(finishTimer);
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function gameLoop(now) {
+    if (!isPlaying) return;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw lane separators based on white keys
+    ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+    ctx.lineWidth = 1;
+    const whiteKeyWidth = canvas.width / numWhiteKeys;
+    for(let i=1; i<numWhiteKeys; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * whiteKeyWidth, 0);
+        ctx.lineTo(i * whiteKeyWidth, canvas.height);
+        ctx.stroke();
+    }
+    
+    let allNotesDone = true;
+    
+    // Draw notes
+    activeNotes.forEach(note => {
+        if (note.hit || note.missed) return;
+        allNotesDone = false;
+        
+        const timeDiff = note.targetTime - now;
+        
+        if (timeDiff > FALL_TIME) return; // not visible yet
+        
+        if (timeDiff < -200) { // missed
+            note.missed = true;
+            combo = 0;
+            updateHUD();
+            const el = keyElements[note.midi];
+            if(el) showFeedback("Miss", el);
+            return;
+        }
+        
+        // Calculate position
+        const y = canvas.height - (timeDiff / FALL_TIME) * canvas.height;
+        
+        // Find x and width based on piano layout
+        const keyInfo = KEYS.find(k => k.midi === note.midi);
+        let x, w;
+        
+        if (!keyInfo.isBlack) {
+            const idx = whiteKeys.findIndex(wk => wk.midi === note.midi);
+            w = canvas.width / numWhiteKeys;
+            x = idx * w;
+            ctx.fillStyle = 'rgba(135, 206, 235, 0.8)'; // Blue for white keys
+        } else {
+            const prevWhiteIndex = whiteKeys.findIndex(wk => wk.midi === note.midi - 1);
+            w = (canvas.width / numWhiteKeys) * 0.6; // Black key width
+            x = (prevWhiteIndex + 1) * (canvas.width / numWhiteKeys) - (w / 2);
+            ctx.fillStyle = 'rgba(255, 140, 0, 0.9)'; // Orange for black keys
+        }
+        
+        // Draw note block
+        ctx.fillRect(x + 2, y - 20, w - 4, 20);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x + 2, y - 20, w - 4, 20);
+    });
+    
+    // Check game end
+    if (allNotesDone && !gameFinished) {
+        gameFinished = true;
+        finishTimer = setTimeout(showResult, 2000);
+    }
+    
+    if (isPlaying) {
+        animationId = requestAnimationFrame(gameLoop);
+    }
+}
+
+function showResult() {
+    isPlaying = false;
+    cancelAnimationFrame(animationId);
+    
+    document.getElementById('final-score').innerText = score;
+    document.getElementById('max-combo').innerText = maxCombo;
+    
+    document.getElementById('result-screen').classList.remove('hidden');
+}
+
+// Event Listeners for UI
+document.getElementById('start-btn').addEventListener('click', startGame);
+
+document.getElementById('retry-btn').addEventListener('click', () => {
+    startGame();
+});
+
+document.getElementById('back-btn').addEventListener('click', () => {
+    document.getElementById('result-screen').classList.add('hidden');
+    document.getElementById('game-container').classList.add('hidden');
+    document.getElementById('menu-screen').classList.remove('hidden');
+});
+
+// Initial Resize
+resizeCanvas();
+</script>
+</body>
+</html>
