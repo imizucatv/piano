@@ -68,10 +68,11 @@
         .hud-text { font-size: 1.5rem; font-weight: bold; color: var(--text); background: rgba(255,255,255,0.7); padding: 5px 15px; border-radius: 20px; }
         canvas { width: 100%; flex: 1; display: block; background: linear-gradient(to bottom, #FFF5E1, #FFDAB9); }
         
-        /* Piano Keyboard - タブレット向けに高さを45vhに拡大 */
+        /* Piano Keyboard */
+        /* 白鍵を押しやすくするため、高さを40vhに設定 */
         #keyboard {
-            height: 45vh; 
-            min-height: 250px;
+            height: 40vh; 
+            min-height: 220px;
             width: 100%; position: relative; display: flex;
             background: #222; border-top: 5px solid var(--primary);
         }
@@ -83,9 +84,9 @@
             background: var(--white-key); height: 100%; z-index: 1; flex: 1;
             box-shadow: inset 0 -3px 5px rgba(0,0,0,0.2);
         }
-        /* 黒鍵も少し太く（3.8%）して押しやすく */
+        /* 黒鍵は本物のピアノに近づけ、高さ55%、幅2.5%に変更 */
         .black-key {
-            background: var(--black-key); height: 60%; width: 3.8%; position: absolute;
+            background: var(--black-key); height: 55%; width: 2.5%; position: absolute;
             z-index: 2; transform: translateX(-50%); border-radius: 0 0 6px 6px;
             box-shadow: inset 0 -3px 5px rgba(255,255,255,0.2);
         }
@@ -494,8 +495,8 @@ function gameLoop(now) {
             ctx.fillStyle = 'rgba(135, 206, 235, 0.8)';
         } else {
             const prevWhiteIndex = whiteKeys.findIndex(wk => wk.midi === note.midi - 1);
-            // 黒鍵のノーツ幅も画面に合わせて調整
-            w = (canvas.width / numWhiteKeys) * 0.7;
+            // 黒鍵のノーツ幅を鍵盤幅（2.5%）に合わせて細く
+            w = (canvas.width / numWhiteKeys) * 0.5;
             x = (prevWhiteIndex + 1) * (canvas.width / numWhiteKeys) - (w / 2);
             ctx.fillStyle = 'rgba(255, 140, 0, 0.9)';
         }
